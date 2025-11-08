@@ -1,0 +1,27 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "MacOSAgent",
+    platforms: [
+        .macOS(.v13)
+    ],
+    products: [
+        .executable(
+            name: "macos-agent",
+            targets: ["MacOSAgent"]
+        )
+    ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
+    ],
+    targets: [
+        .executableTarget(
+            name: "MacOSAgent",
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            path: "Sources"
+        )
+    ]
+)
