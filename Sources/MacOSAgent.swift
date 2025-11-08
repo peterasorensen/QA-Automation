@@ -7,7 +7,7 @@ struct MacOSAgent: ParsableCommand {
         commandName: "macos-agent",
         abstract: "MacOS Accessibility API-based agent CLI",
         subcommands: [
-            // Snapshot.self,  // Disabled for now - keeping screenshot only
+            Snapshot.self,
             Screenshot.self,
             AXAction.self,
             CGAction.self,

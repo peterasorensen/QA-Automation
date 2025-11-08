@@ -13,20 +13,13 @@ struct AccessibleElement: Codable {
     let title: String?
     let description: String?
     let value: String?
-    let frame: Frame?
+    let frame: [Double]?  // [x, y, width, height]
     let actions: [String]
     let children: [AccessibleElement]?
     let enabled: Bool
     let focused: Bool
     let selected: Bool?
     let attributes: [String: String]
-}
-
-struct Frame: Codable {
-    let x: Double
-    let y: Double
-    let width: Double
-    let height: Double
 }
 
 struct ScreenSize: Codable {

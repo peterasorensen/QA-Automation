@@ -68,7 +68,7 @@ class AccessibilitySnapshot {
 
     private func captureApplication(pid: pid_t) throws -> AccessibleElement {
         let appElement = AXUIElementCreateApplication(pid)
-        return try traverseElement(appElement, depth: 0, maxDepth: 500)
+        return try traverseElement(appElement, depth: 0, maxDepth: 10000)
     }
 
     private func traverseElement(_ element: AXUIElement, depth: Int, maxDepth: Int) throws -> AccessibleElement {
@@ -103,15 +103,11 @@ class AccessibilitySnapshot {
             attributes["placeholder"] = placeholder
         }
 
-        // Get children (if not too deep)
+        // Get children - traverse everything, no depth limit
         var children: [AccessibleElement]? = nil
         if depth < maxDepth {
             children = getChildren(element, depth: depth, maxDepth: maxDepth)
         }
-
-        // Filter out elements with empty descriptions if they have no useful info
-        let hasUsefulInfo = title != nil || value != nil || !actions.isEmpty ||
-                           (children?.isEmpty == false) || enabled || focused
 
         return AccessibleElement(
             id: id,
@@ -122,7 +118,7 @@ class AccessibilitySnapshot {
             value: value,
             frame: frame,
             actions: actions,
-            children: hasUsefulInfo ? children : nil,
+            children: children,
             enabled: enabled,
             focused: focused,
             selected: selected,
@@ -138,12 +134,6 @@ class AccessibilitySnapshot {
         var result: [AccessibleElement] = []
         for child in children {
             if let childElement = try? traverseElement(child, depth: depth + 1, maxDepth: maxDepth) {
-                // Skip elements with empty descriptions and no useful data
-                if childElement.description != nil && childElement.description!.isEmpty &&
-                   childElement.title == nil && childElement.value == nil &&
-                   childElement.actions.isEmpty && (childElement.children?.isEmpty ?? true) {
-                    continue
-                }
                 result.append(childElement)
             }
         }
@@ -169,7 +159,7 @@ class AccessibilitySnapshot {
         }
     }
 
-    private func getFrame(_ element: AXUIElement) -> Frame? {
+    private func getFrame(_ element: AXUIElement) -> [Double]? {
         guard let positionValue = getAttribute(element, .position),
               let sizeValue = getAttribute(element, .size) else {
             return nil
@@ -181,8 +171,7 @@ class AccessibilitySnapshot {
         AXValueGetValue(positionValue as! AXValue, .cgPoint, &position)
         AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
 
-        return Frame(x: Double(position.x), y: Double(position.y),
-                    width: Double(size.width), height: Double(size.height))
+        return [Double(position.x), Double(position.y), Double(size.width), Double(size.height)]
     }
 
     private func getActions(_ element: AXUIElement) -> [String] {
