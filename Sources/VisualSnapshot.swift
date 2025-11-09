@@ -21,7 +21,8 @@ class VisualSnapshot {
         displayID: CGDirectDisplayID? = nil,
         format: OutputFormat = .base64,
         minElementSize: CGFloat = 20.0,  // Minimum width/height to avoid tiny sub-elements
-        maxElementSize: CGFloat = 800.0  // Maximum size to avoid large containers
+        maxElementSize: CGFloat = 800.0,  // Maximum size to avoid large containers
+        includeDebugTree: Bool = false
     ) throws -> VisualSnapshotResult {
         // Check accessibility permissions
         guard AXIsProcessTrusted() else {
@@ -91,7 +92,8 @@ class VisualSnapshot {
                 actions: $0.actions,
                 enabled: $0.enabled
             )},
-            imageData: imageOutput
+            imageData: imageOutput,
+            debugTree: includeDebugTree ? accessibilityElements : nil
         )
     }
 
@@ -589,6 +591,7 @@ struct VisualSnapshotResult: Codable {
     let visibleWindows: [WindowInfo]
     let interactableElements: [InteractableElementInfo]
     let imageData: String
+    let debugTree: [AccessibleElement]?
 }
 
 struct WindowInfo: Codable {

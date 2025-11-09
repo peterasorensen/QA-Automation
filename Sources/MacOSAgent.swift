@@ -38,6 +38,9 @@ struct Snapshot: ParsableCommand {
     @Option(name: .long, help: "Display ID to capture (default: main display)")
     var displayId: UInt32?
 
+    @Flag(name: .long, help: "Output full accessibility tree JSON for debugging")
+    var debugTree: Bool = false
+
     func run() throws {
         // Determine output format
         let format: VisualSnapshot.OutputFormat
@@ -54,7 +57,8 @@ struct Snapshot: ParsableCommand {
             app: app,
             systemWide: systemWide,
             displayID: displayId,
-            format: format
+            format: format,
+            includeDebugTree: debugTree
         )
 
         let encoder = JSONEncoder()
