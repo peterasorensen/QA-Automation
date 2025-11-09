@@ -3,8 +3,6 @@ import Cocoa
 import Foundation
 
 class AXActions {
-    private let snapshot = AccessibilitySnapshot()
-
     func perform(
         action: String,
         elementId: String,
@@ -12,7 +10,7 @@ class AXActions {
         x: Double?, y: Double?,
         width: Double?, height: Double?
     ) throws {
-        guard let element = snapshot.getElementFromCache(elementId) else {
+        guard let element = VisualSnapshot.shared.getElementFromCache(elementId) else {
             throw AXActionError.elementNotFound(elementId)
         }
 

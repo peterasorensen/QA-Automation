@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 struct SnapshotResult: Codable {
@@ -25,4 +26,22 @@ struct AccessibleElement: Codable {
 struct ScreenSize: Codable {
     let width: Double
     let height: Double
+}
+
+struct DisplayBounds: Codable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+}
+
+// Extension to convert NSImage to PNG data
+extension NSImage {
+    func pngData() -> Data? {
+        guard let tiffData = self.tiffRepresentation,
+              let bitmapImage = NSBitmapImageRep(data: tiffData) else {
+            return nil
+        }
+        return bitmapImage.representation(using: .png, properties: [:])
+    }
 }

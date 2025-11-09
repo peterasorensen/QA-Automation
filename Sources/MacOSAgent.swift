@@ -8,7 +8,6 @@ struct MacOSAgent: ParsableCommand {
         abstract: "MacOS Accessibility API-based agent CLI",
         subcommands: [
             Snapshot.self,
-            Screenshot.self,
             AXAction.self,
             CGAction.self,
             Gesture.self
@@ -18,7 +17,7 @@ struct MacOSAgent: ParsableCommand {
 
 struct Snapshot: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Capture accessibility tree snapshot as JSON"
+        abstract: "Capture visual snapshot with annotated UI elements"
     )
 
     @Option(name: .long, help: "Target application bundle ID or name")
@@ -27,12 +26,40 @@ struct Snapshot: ParsableCommand {
     @Flag(name: .long, help: "Include all system-wide elements")
     var systemWide: Bool = false
 
+    @Option(name: .long, help: "Output file path for annotated image")
+    var output: String?
+
+    @Flag(name: .long, help: "Output as base64 (default)")
+    var base64: Bool = false
+
+    @Flag(name: .long, help: "Output both file and base64")
+    var both: Bool = false
+
+    @Option(name: .long, help: "Display ID to capture (default: main display)")
+    var displayId: UInt32?
+
     func run() throws {
-        let snapshot = AccessibilitySnapshot()
-        let result = try snapshot.capture(app: app, systemWide: systemWide)
+        // Determine output format
+        let format: VisualSnapshot.OutputFormat
+        if both {
+            let path = output ?? "/tmp/visual-snapshot-\(Int(Date().timeIntervalSince1970)).png"
+            format = .both(path)
+        } else if let outputPath = output {
+            format = .file(outputPath)
+        } else {
+            format = .base64
+        }
+
+        let result = try VisualSnapshot.shared.capture(
+            app: app,
+            systemWide: systemWide,
+            displayID: displayId,
+            format: format
+        )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
         let jsonData = try encoder.encode(result)
 
         if let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -166,54 +193,3 @@ struct Gesture: ParsableCommand {
     }
 }
 
-struct Screenshot: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Capture screen as image (base64 or file)"
-    )
-
-    @Option(name: .long, help: "Output file path")
-    var output: String?
-
-    @Flag(name: .long, help: "Output as base64 (default)")
-    var base64: Bool = false
-
-    @Flag(name: .long, help: "Output both file and base64 as JSON")
-    var both: Bool = false
-
-    @Flag(name: .long, help: "Capture all displays")
-    var allDisplays: Bool = false
-
-    @Option(name: .long, help: "Display ID to capture (default: main display)")
-    var displayId: UInt32?
-
-    func run() throws {
-        let screenshotCapture = ScreenshotCapture()
-
-        if allDisplays {
-            // Capture all displays
-            let screenshots = try screenshotCapture.captureAllDisplays()
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let jsonData = try encoder.encode(screenshots)
-
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print(jsonString)
-            }
-        } else {
-            // Determine output format
-            let format: ScreenshotCapture.OutputFormat
-            if both {
-                let path = output ?? "/tmp/screenshot-\(Int(Date().timeIntervalSince1970)).png"
-                format = .both(path)
-            } else if let outputPath = output {
-                format = .file(outputPath)
-            } else {
-                format = .base64
-            }
-
-            // Capture and output
-            let result = try screenshotCapture.capture(displayID: displayId, format: format)
-            print(result)
-        }
-    }
-}
