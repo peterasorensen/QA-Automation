@@ -20,8 +20,9 @@ class VisualSnapshot {
         systemWide: Bool,
         displayID: CGDirectDisplayID? = nil,
         format: OutputFormat = .base64,
-        minElementSize: CGFloat = 20.0,  // Minimum width/height to avoid tiny sub-elements
-        maxElementSize: CGFloat = 800.0,  // Maximum size to avoid large containers
+        minElementSize: CGFloat = 10.0,  // Minimum width/height to avoid tiny sub-elements
+        maxElementSize: CGFloat = 1200.0,  // Maximum size to avoid large containers
+        minGroupSize: CGFloat = 5.0,  // Minimum size for AXGroups (can be smaller)
         includeDebugTree: Bool = false
     ) throws -> VisualSnapshotResult {
         // Check accessibility permissions
@@ -51,6 +52,7 @@ class VisualSnapshot {
             accessibilityElements,
             minSize: minElementSize,
             maxSize: maxElementSize,
+            minGroupSize: minGroupSize,
             windows: visibleWindows
         )
 
@@ -320,10 +322,12 @@ class VisualSnapshot {
         _ elements: [AccessibleElement],
         minSize: CGFloat,
         maxSize: CGFloat,
+        minGroupSize: CGFloat,
         windows: [WindowData]
     ) -> [InteractableElement] {
         var drawnBoxes: [CGRect] = []
         var visibleElements: [InteractableElement] = []
+        var candidateGroups: [AccessibleElement] = []
 
         // Define clickable roles we want to annotate
         let clickableRoles: Set<String> = [
@@ -347,6 +351,36 @@ class VisualSnapshot {
             "AXCell"         // Table/list cells
         ]
 
+        // Actions that indicate pressability
+        let pressableActions: Set<String> = [
+            "AXPress",
+            "AXShowMenu",
+            "AXPick"
+        ]
+
+        // Helper function to check if element or any children have pressable actions
+        func hasPressableChildren(_ element: AccessibleElement) -> Bool {
+            // Check if this element has pressable actions
+            if !element.actions.isEmpty {
+                for action in element.actions {
+                    if pressableActions.contains(action) {
+                        return true
+                    }
+                }
+            }
+
+            // Recursively check children
+            if let children = element.children {
+                for child in children {
+                    if hasPressableChildren(child) {
+                        return true
+                    }
+                }
+            }
+
+            return false
+        }
+
         // DFS traversal: process children before parents
         // This prioritizes more specific (smaller) elements over generic (larger) ones
         func traverseDFS(_ element: AccessibleElement) {
@@ -359,8 +393,7 @@ class VisualSnapshot {
 
             // Then process this element
             guard let frame = element.frame,
-                  frame.count == 4,
-                  !element.actions.isEmpty else {
+                  frame.count == 4 else {
                 return
             }
 
@@ -371,28 +404,34 @@ class VisualSnapshot {
                 height: frame[3]
             )
 
-            // Skip elements below minimum size threshold
-            guard bounds.width >= minSize && bounds.height >= minSize else {
-                return
-            }
-
-            // Skip elements above maximum size threshold (likely containers)
-            guard bounds.width <= maxSize && bounds.height <= maxSize else {
-                return
-            }
-
             // Skip if element has zero area
             guard bounds.width > 0 && bounds.height > 0 else {
                 return
             }
 
-            // Only include elements with clickable roles
-            guard clickableRoles.contains(element.role) else {
+            // Get AXUIElement from cache
+            guard let axElement = elementCache[element.id] else {
                 return
             }
 
-            // Get AXUIElement from cache
-            guard let axElement = elementCache[element.id] else {
+            // Check if this is an AXGroup - collect it for later processing
+            if element.role == "AXGroup" {
+                candidateGroups.append(element)
+                return
+            }
+
+            // For other elements, apply regular size constraints
+            guard bounds.width >= minSize && bounds.height >= minSize else {
+                return
+            }
+
+            guard bounds.width <= maxSize && bounds.height <= maxSize else {
+                return
+            }
+
+            // For other elements, must have actions and be a clickable role
+            guard !element.actions.isEmpty,
+                  clickableRoles.contains(element.role) else {
                 return
             }
 
@@ -444,6 +483,64 @@ class VisualSnapshot {
             if !hasSignificantOverlap {
                 filteredElements.append(element)
                 drawnBoxes.append(element.bounds)
+            }
+        }
+
+        // Now process AXGroup candidates
+        // Add groups that have no pressable children and don't overlap with existing boxes
+        for groupElement in candidateGroups {
+            // Skip if this group has any pressable children
+            if hasPressableChildren(groupElement) {
+                continue
+            }
+
+            guard let frame = groupElement.frame,
+                  frame.count == 4,
+                  let axElement = elementCache[groupElement.id] else {
+                continue
+            }
+
+            let bounds = CGRect(
+                x: frame[0],
+                y: frame[1],
+                width: frame[2],
+                height: frame[3]
+            )
+
+            // Apply group-specific size constraints
+            guard bounds.width >= minGroupSize && bounds.height >= minGroupSize else {
+                continue
+            }
+
+            guard bounds.width <= maxSize && bounds.height <= maxSize else {
+                continue
+            }
+
+            // Check if this group overlaps with any existing boxes
+            let hasOverlap = drawnBoxes.contains { existingBox in
+                bounds.intersects(existingBox)
+            }
+
+            // If no overlap, add this group
+            if !hasOverlap {
+                let containingWindow = findContainingWindow(for: bounds, in: windows)
+                let layer = containingWindow?.layer ?? Int.max
+
+                let interactableElement = InteractableElement(
+                    id: groupElement.id,
+                    role: groupElement.role,
+                    title: groupElement.title,
+                    description: groupElement.description,
+                    value: groupElement.value,
+                    bounds: bounds,
+                    actions: groupElement.actions,
+                    enabled: groupElement.enabled,
+                    axElement: axElement,
+                    layer: layer
+                )
+
+                filteredElements.append(interactableElement)
+                drawnBoxes.append(bounds)
             }
         }
 
